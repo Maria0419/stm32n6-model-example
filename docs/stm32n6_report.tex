@@ -1,0 +1,429 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{float}
+
+\hypersetup{colorlinks=true, linkcolor=black, urlcolor=blue}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\emergencystretch=2em
+
+\lstset{
+basicstyle=\ttfamily\small, breaklines=true, frame=single, columns=fullflexible,
+keepspaces=true, showstringspaces=false }
+
+\title{STM32N6 Square Segmentation Workflow\\Host Preparation, Cube.AI Project Generation, and UART Run Guide}
+\author{Project documentation}
+\date{June 23, 2026}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\begin{abstract}
+This document describes the STM32N6 workflow used for binary
+square segmentation on grayscale 128x128 images. The workflow covers host-side ONNX
+export, INT8 quantization, STM32Cube.AI project generation, firmware customization for
+UART-based inference, signed flashing to external XSPI, and host-to-board inference
+through a binary protocol.
+
+The repository is split into two main parts. The host-side model preparation flow lives
+under \path{models/square_seg_stm32n6/}. The board-side firmware project generated from
+the INT8 model and then customized for the final deployment flow lives under
+\path{stm32-model-example-int8/}.
+\end{abstract}
+
+\section{Project Overview}
+
+The goal of this project is binary square segmentation on STM32N6 with a UART-based
+host/board inference loop. A host script sends one quantized 128x128 grayscale image to
+the board, the STM32N6 runs inference with the generated AI runtime, and the board
+returns the predicted mask together with the measured inference time.
+
+The key repository paths are:
+
+\begin{table}[H]
+\centering
+\caption{Main repository areas.}
+\begin{tabular}{p{0.32\linewidth} p{0.58\linewidth}}
+\toprule
+Path & Role \\
+\midrule
+\path{models/square_seg_stm32n6/configs/} & YAML presets for export, quantization, compare, deployment, and UART inference \\
+\path{models/square_seg_stm32n6/src/} & Host-side Python scripts \\
+\path{models/square_seg_stm32n6/artifacts/} & Generated ONNX, INT8, report, and UART outputs \\
+\path{stm32-model-example-int8/} & STM32Cube.AI generated project, later customized for the final UART workflow \\
+\path{stm32-model-example-int8/tools/deploy_signed.sh} & Signed flashing helper for FSBL and Appli \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Model Preparation Pipeline}
+
+The host-side flow that leads to the deployable model is kept in
+\path{models/square_seg_stm32n6/}. The default configuration in
+\path{configs/train.yaml}, uses grayscale 128x128 images, and defines a compact
+square segmentation CNN with 32 channels and 13 layers.
+
+\subsection{Python environment}
+
+From the repository root:
+
+\begin{lstlisting}[language=bash]
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+\end{lstlisting}
+
+\subsection{Export ONNX}
+
+The ONNX export step is implemented by
+\path{models/square_seg_stm32n6/src/export_onnx.py} using the hardcoded configuration file
+\path{models/square_seg_stm32n6/configs/export.yaml}.
+
+\begin{lstlisting}[language=bash]
+python models/square_seg_stm32n6/src/export_onnx.py
+\end{lstlisting}
+
+This step loads \path{artifacts/model.pt}, rebuilds the model from the saved training
+configuration, exports a fixed-shape ONNX graph to
+\path{models/square_seg_stm32n6/artifacts/model.onnx}, validates the ONNX graph with
+\texttt{onnx.checker}. By default it also runs an ONNX Runtime CPU check and writes
+\path{models/square_seg_stm32n6/artifacts/onnx_report.json}.
+
+\subsection{Quantize to INT8}
+
+The quantization step is implemented by
+\path{models/square_seg_stm32n6/src/quantize_onnx.py} using the hardcoded configuration file
+\path{models/square_seg_stm32n6/configs/quantize.yaml}.
+
+\begin{lstlisting}[language=bash]
+python models/square_seg_stm32n6/src/quantize_onnx.py
+\end{lstlisting}
+
+This step generates \path{models/square_seg_stm32n6/artifacts/model_int8.onnx} and
+writes \path{models/square_seg_stm32n6/artifacts/quantization_report.json}. The report
+shows the deployment constraints that remain important later:
+
+\begin{itemize}
+\item the source ONNX must be exported with opset 13 or newer; this repository uses opset
+      13,
+\item static calibration uses 256 deterministic samples with seed 42,
+\item calibration preprocessing is grayscale, 128x128, and divide-by-255,
+\item the quantized graph stays in QDQ INT8 format.
+\end{itemize}
+
+\section{STM32Cube.AI Generation}
+
+The committed STM32 firmware project was generated in STM32Cube.AI from the INT8 model,
+then customized manually afterward. In practice, the INT8 model imported into the STM32
+tooling is the same final quantized model produced by the host-side flow, namely
+\path{models/square_seg_stm32n6/artifacts/model_int8.onnx}.
+
+STM32Cube.AI generated the project \path{stm32-model-example-int8/}. The resulting
+project includes the standard STM32N6 secure boot split between an FSBL context and an
+application context, together with the generated AI runtime artifacts used by the final
+firmware.
+
+The most important generated directories are:
+
+\begin{table}[H]
+\centering
+\caption{Cube.AI generated project structure.}
+\begin{tabular}{p{0.28\linewidth} p{0.62\linewidth}}
+\toprule
+Path & Meaning \\
+\midrule
+\path{stm32-model-example-int8/.ai/} & Cube.AI internal workspace, reports, generated network package, and auxiliary output files \\
+\path{stm32-model-example-int8/Appli/AI/App/} & Application-integrated AI runtime sources such as \texttt{network.c}, \texttt{stai\_network.c}, and \texttt{network\_atonbuf.xSPI2.c} \\
+\path{stm32-model-example-int8/FSBL/} & First-stage bootloader sources for the secure external-memory boot flow \\
+\path{stm32-model-example-int8/STM32CubeIDE/} & IDE workspace containing separate \texttt{FSBL} and \texttt{Appli} projects and their build outputs \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The \path{.ai/} directory shows the typical generated content that came from
+STM32Cube.AI, including:
+
+\begin{itemize}
+\item \path{.ai/st_ai_output/network.c},
+\item \path{.ai/st_ai_output/network.h},
+\item \path{.ai/st_ai_output/network_atonbuf.xSPI2.c},
+\item \path{.ai/st_ai_output/stai_network.c},
+\item \path{.ai/st_ai_output/network_generate_report.txt},
+\item \path{.ai/st_ai_output/network_model_int8_c_info_generate.json}.
+\end{itemize}
+
+The project metadata in \path{stm32-model-example-int8/stm32-model-example-int8.ioc}
+shows the secure multi-context structure with \texttt{Mcu.Context0=FSBL},
+\texttt{Mcu.Context1=Appli}, and \texttt{Mcu.Context2=ExtMemLoader}. After generation,
+the project was manually adapted to support the final end-to-end UART inference flow.
+
+\section{Firmware Integration After Cube.AI Generation}
+
+The final custom behavior is implemented in
+\path{stm32-model-example-int8/Appli/Core/Src/main.c}. The documentation here focuses on
+the final behavior rather than the edit history.
+
+At startup, the application:
+
+\begin{itemize}
+\item initializes the STM32N6 AI runtime,
+\item resolves the generated input and output tensor buffers,
+\item enables DWT cycle counting for board-side timing,
+\item waits forever for frames on \texttt{USART1}.
+\end{itemize}
+
+The application then exposes a simple inference service over UART:
+
+\begin{itemize}
+\item a host sends a \texttt{HELLO} request,
+\item the board returns image and quantization metadata,
+\item the host sends one CRC-protected quantized input tensor,
+\item the board runs inference on the generated network,
+\item the board returns the execution time in microseconds and the raw INT8 output tensor,
+\item error conditions are mapped to protocol status codes and returned as \texttt{ERROR}
+      frames.
+\end{itemize}
+
+The same application source also contains the board-side CRC32 logic, frame parsing,
+quantized input reception, timing capture, and response serialization. The output mask
+returned to the host is the raw INT8 network output. Thresholding and metric computation
+are intentionally done on the host side so the run script can save both the prediction
+artifact and the evaluation report.
+
+The project layout also reflects the final XSPI boot and deployment arrangement. The
+board image is split into trusted FSBL and trusted application binaries, and the
+deployment helper flashes them separately into external XSPI using the dedicated
+STM32N6570-DK external loader.
+
+\section{UART Protocol and Host Workflow}
+
+\subsection{Protocol shape}
+
+The host script \path{models/square_seg_stm32n6/src/uart_inference.py} and the firmware
+in \path{stm32-model-example-int8/Appli/Core/Src/main.c} implement the same protocol.
+
+Every frame starts with a 16-byte header:
+
+\begin{table}[H]
+\centering
+\caption{UART frame header.}
+\begin{tabular}{ll}
+\toprule
+Field & Meaning \\
+\midrule
+4 bytes & magic \texttt{SSEG} \\
+1 byte & protocol version, fixed to \texttt{1} \\
+1 byte & message type \\
+2 bytes & status code, little-endian \\
+4 bytes & payload length, little-endian \\
+4 bytes & CRC32 of payload, or 0 for empty payload \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The message types are:
+
+\begin{itemize}
+\item \texttt{HELLO} (\texttt{0x01}),
+\item \texttt{IMAGE} (\texttt{0x02}),
+\item \texttt{HELLO\_ACK} (\texttt{0x81}),
+\item \texttt{RESULT} (\texttt{0x82}),
+\item \texttt{ERROR} (\texttt{0xFF}).
+\end{itemize}
+
+The \texttt{HELLO\_ACK} payload is a 24-byte metadata block with:
+
+\begin{itemize}
+\item input width and height,
+\item input tensor size in bytes,
+\item output tensor size in bytes,
+\item input scale and input zero-point,
+\item output scale and output zero-point.
+\end{itemize}
+
+The \texttt{RESULT} payload contains:
+
+\begin{itemize}
+\item 8 bytes of inference time in microseconds,
+\item the raw INT8 output tensor.
+\end{itemize}
+
+The firmware uses explicit error status codes for bad magic, bad protocol version, bad
+message, bad payload length, bad CRC, AI initialization failure, AI inference failure,
+and UART transfer failure.
+
+\subsection{Host workflow}
+
+The default host configuration is
+\path{models/square_seg_stm32n6/configs/uart_inference.yaml}. It defines:
+
+\begin{itemize}
+\item serial port \texttt{/dev/ttyACM0},
+\item baud rate \texttt{115200},
+\item sample image \path{../../../../data/data/test/img_1981_image.tif},
+\item reference mask \path{../../../../data/data/test/img_1981_label.tif},
+\item output directory \path{models/square_seg_stm32n6/artifacts/uart_inference/}.
+\end{itemize}
+
+When the user runs:
+
+\begin{lstlisting}[language=bash]
+python models/square_seg_stm32n6/src/uart_inference.py
+\end{lstlisting}
+
+the host script performs the following final workflow:
+
+\begin{enumerate}
+\item open the serial port and keep retrying until the board answers the handshake,
+\item send \texttt{HELLO},
+\item receive tensor metadata in \texttt{HELLO\_ACK},
+\item load the configured grayscale image,
+\item resize it if needed and quantize it with the board-provided input scale and
+      zero-point,
+\item send the \texttt{IMAGE} payload with CRC32 protection,
+\item receive \texttt{RESULT},
+\item decode the returned inference time and raw INT8 mask,
+\item threshold the mask with the returned output zero-point,
+\item compare the predicted binary mask with the reference mask,
+\item save a PNG mask and a JSON report.
+\end{enumerate}
+
+The generated files are:
+
+\begin{itemize}
+\item \path{models/square_seg_stm32n6/artifacts/uart_inference/prediction.png},
+\item \path{models/square_seg_stm32n6/artifacts/uart_inference/report.json}.
+\end{itemize}
+
+The JSON report includes:
+
+\begin{itemize}
+\item inference time in microseconds and milliseconds,
+\item Dice score,
+\item IoU score,
+\item protocol magic and version,
+\item tensor dimensions,
+\item tensor sizes,
+\item input and output quantization parameters.
+\end{itemize}
+
+\section{Build and Deployment}
+
+\subsection{Build the firmware}
+
+Open the CubeIDE workspace under \path{stm32-model-example-int8/STM32CubeIDE/}. Build
+both projects:
+
+\begin{itemize}
+\item \texttt{FSBL},
+\item \texttt{Appli}.
+\end{itemize}
+
+The relevant output binaries are the latest:
+
+\begin{itemize}
+\item \path{stm32-model-example-int8/STM32CubeIDE/FSBL/Debug/stm32-model-example-int8_FSBL.bin},
+\item \path{stm32-model-example-int8/STM32CubeIDE/Appli/Debug/stm32-model-example-int8_Appli.bin}.
+\end{itemize}
+
+The deploy helper locates the newest matching \texttt{FSBL.bin} and \texttt{Appli.bin}
+automatically, so the normal user command does not need explicit file paths.
+
+\subsection{Signed flashing flow}
+
+The final deployment command is:
+
+\begin{lstlisting}[language=bash]
+bash stm32-model-example-int8/tools/deploy_signed.sh
+\end{lstlisting}
+
+This script performs the final clean flow:
+
+\begin{enumerate}
+\item locate the latest FSBL and Appli \texttt{.bin} files under \path{STM32CubeIDE/},
+\item add trusted STM32N6 headers with \texttt{STM32\_SigningTool\_CLI},
+\item use \path{MX66UW1G45G_STM32N6570-DK.stldr} as the external loader,
+\item flash the trusted FSBL to \texttt{0x70000000},
+\item flash the trusted Appli to \texttt{0x70100000},
+\item reset the target.
+\end{enumerate}
+
+The script resolves \texttt{STM32\_Programmer\_CLI}, \texttt{STM32\_SigningTool\_CLI},
+and the external loader automatically when possible. The default programmer connect
+arguments are:
+
+\begin{lstlisting}
+port=SWD mode=HOTPLUG
+\end{lstlisting}
+
+The required board state during programming is:
+
+\begin{itemize}
+\item DEV boot mode,
+\item BOOT1 high.
+\end{itemize}
+
+If \path{stm32-model-example-int8/out/deploy} is not writable, the script falls back
+automatically to:
+
+\begin{lstlisting}
+/tmp/stm32n6-deploy-$USER
+\end{lstlisting}
+
+and stores the trusted binaries there.
+
+\section{Run Guide}
+
+The clean final user workflow is:
+
+\begin{enumerate}
+\item prepare the Python environment,
+\item export the ONNX model,
+\item quantize it to INT8,
+\item open \path{stm32-model-example-int8/STM32CubeIDE/} in STM32CubeIDE,
+\item build \texttt{FSBL} and \texttt{Appli},
+\item run \texttt{bash stm32-model-example-int8/tools/deploy\_signed.sh},
+\item reset or power-cycle the board if needed,
+\item run \texttt{python models/square\_seg\_stm32n6/src/uart\_inference.py}.
+\end{enumerate}
+
+In command form:
+
+\begin{lstlisting}[language=bash]
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python models/square_seg_stm32n6/src/export_onnx.py
+
+python models/square_seg_stm32n6/src/quantize_onnx.py
+
+bash stm32-model-example-int8/tools/deploy_signed.sh
+
+python models/square_seg_stm32n6/src/uart_inference.py
+\end{lstlisting}
+
+The produced outputs for one run are:
+
+\begin{itemize}
+\item a predicted mask PNG,
+\item a JSON report with inference time, Dice, IoU, and tensor metadata.
+\end{itemize}
+
+That is the final workflow represented by this repository: host-side preparation of the
+INT8 model, STM32Cube.AI generation of the STM32 project from that INT8 model, manual
+firmware customization for the UART service, signed flashing to XSPI, and host-to-board
+inference through the defined serial protocol.
+
+\end{document}

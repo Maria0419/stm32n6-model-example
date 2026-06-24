@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Local logs and reports
+*.log
+
+# Model and host artifacts
+*.pt
+models/*/artifacts/*
+!models/*/artifacts/.gitkeep
+
+# LaTeX build outputs
+docs/*.aux
+docs/*.fdb_latexmk
+docs/*.fls
+docs/*.log
+docs/*.out
+docs/*.pdf
+docs/*.synctex.gz
+docs/*.toc
+
+# Node local dependencies
+node_modules/
+
+# STM32 generated build outputs
+stm32-model-example-int8/out/
+stm32-model-example-int8/STM32CubeIDE/Appli/Debug/
+stm32-model-example-int8/STM32CubeIDE/Appli/Release/
+stm32-model-example-int8/STM32CubeIDE/FSBL/Debug/
+stm32-model-example-int8/STM32CubeIDE/FSBL/Release/
+
+# Optional local IDE caches
+.idea/
+
+# Local npm bootstrap files
+package.json
+package-lock.json
+
+# STM32Cube.AI generated work directories
+stm32-model-example-int8/.ai/run/
+stm32-model-example-int8/.ai/st_ai_ws/
+stm32-model-example-int8/.ai/generate/backup/
+stm32-model-example-int8/.ai/run-settings.json
+# Private signing material
+stm32-model-example-int8/tools/keys/

@@ -1,0 +1,7 @@
+train_config: train.yaml
+
+export:
+  output: ../artifacts/model.onnx
+  opset: 13
+  tolerance: 0.01
+  skip_ort_check: false

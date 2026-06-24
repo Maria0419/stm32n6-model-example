@@ -1,0 +1,12 @@
+train_config: train.yaml
+quantize:
+  input: ../artifacts/model.onnx
+  output: ../artifacts/model_int8.onnx
+  report: ../artifacts/quantization_report.json
+  calibration_samples: 256
+  seed: 42
+  format: QDQ
+  activation_type: QInt8
+  weight_type: QInt8
+  calibration_method: MinMax
+  per_channel: true

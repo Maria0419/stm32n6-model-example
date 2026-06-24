@@ -1,0 +1,16 @@
+serial:
+  port: /dev/ttyACM0
+  baudrate: 115200
+  timeout_seconds: 10
+  handshake_wait_seconds: 60
+sample:
+  image: ../../../../data/data/test/img_1981_image.tif
+  mask: ../../../../data/data/test/img_1981_label.tif
+benchmark:
+  dataset_dir: ../../../../data/data/test
+  single_runs: 10
+  multi_image_count: 8
+output:
+  directory: ../artifacts/uart_inference
+  mask_filename: prediction.png
+  report_filename: report.json

@@ -1,0 +1,22 @@
+{
+  "toolchain": "STM32CubeIDE",
+  "variant": "Validation",
+  "fromMx": false,
+  "isGenerated": true,
+  "name": "stm32-model-example-int8",
+  "createdAt": 1781886736798,
+  "lastModified": 1781887016206,
+  "lastAccessed": 1781887016206,
+  "path": "/home/maria/.stm32cubeaistudio/workspace",
+  "board": "STM32N6570-DK",
+  "mcu": "",
+  "type": "BYOM",
+  "lastGenerationRunId": "run-1",
+  "context": "Appli",
+  "contextProject": "FullSecure",
+  "uartInstance": {
+    "usart": "USART1",
+    "txpin": "PE5",
+    "rxpin": "PE6"
+  }
+}

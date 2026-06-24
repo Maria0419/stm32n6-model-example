@@ -1,0 +1,22 @@
+# Reproducible training configuration for the selected 32-channel, 13-layer model.
+train_dir: ../../../../data/data/train
+test_dir: ../../../../data/data/test
+artifacts_dir: ../artifacts
+image_height: 128
+image_width: 128
+model:
+  name: square_seg
+  params:
+    channels: 32
+    layers: 13
+    kernel_size: 3
+epochs: 14
+batch_size: 192
+eval_batch_size: 256
+learning_rate: 0.001
+max_grad_norm: 1.0
+num_workers: 4
+augment: false
+bce_loss_weight: 1.0
+pos_weight: 4.0
+early_stopping_patience: 5

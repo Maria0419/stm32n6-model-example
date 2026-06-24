@@ -1,0 +1,8 @@
+numpy>=1.26,<3
+onnx>=1.16,<2
+onnxruntime>=1.18,<2
+Pillow>=10,<12
+PyYAML>=6,<7
+pyserial>=3.5,<4
+torch>=2.3,<3
+tqdm>=4.66,<5

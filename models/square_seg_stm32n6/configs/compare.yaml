@@ -1,0 +1,8 @@
+train_config: train.yaml
+compare:
+  float_model: ../artifacts/model.onnx
+  int8_model: ../artifacts/model_int8.onnx
+  report: ../artifacts/comparison_report.json
+  threshold: 0.5
+  minimum_int8_iou: 0.95
+  maximum_iou_degradation: 0.02
