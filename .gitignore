@@ -34,6 +34,9 @@ stm32-model-example-int8/STM32CubeIDE/Appli/Debug/
 stm32-model-example-int8/STM32CubeIDE/Appli/Release/
 stm32-model-example-int8/STM32CubeIDE/FSBL/Debug/
 stm32-model-example-int8/STM32CubeIDE/FSBL/Release/
+stm32-model-example-int8/STM32CubeIDE/.settings/
+stm32-model-example-int8/STM32CubeIDE/Appli/.settings/
+stm32-model-example-int8/STM32CubeIDE/FSBL/.settings/
 
 # Optional local IDE caches
 .idea/
@@ -42,10 +45,14 @@ stm32-model-example-int8/STM32CubeIDE/FSBL/Release/
 package.json
 package-lock.json
 
-# STM32Cube.AI generated work directories
+# STM32Cube.AI generated work directories and reports
 stm32-model-example-int8/.ai/run/
 stm32-model-example-int8/.ai/st_ai_ws/
+stm32-model-example-int8/.ai/st_ai_output/
 stm32-model-example-int8/.ai/generate/backup/
 stm32-model-example-int8/.ai/run-settings.json
+stm32-model-example-int8/.ai/*.mpool
+stm32-model-example-int8/.ai/*.json
+
 # Private signing material
 stm32-model-example-int8/tools/keys/

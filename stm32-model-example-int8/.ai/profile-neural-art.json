@@ -1,8 +1,0 @@
-{
-  "Profiles": {
-    "user_profile": {
-      "memory_pool": "/home/maria/.stm32cubeaistudio/workspace/stm32-model-example-int8/.ai/memory_pool.mpool",
-      "options": "--native-float --cache-maintenance --Ocache-opt --enable-virtual-mem-pools --Os --Oauto-sched --enable-epoch-controller"
-    }
-  }
-}
